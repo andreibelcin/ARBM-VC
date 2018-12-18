@@ -29,7 +29,8 @@ arbm = ARBM(
     cdk_level=1,
     sample_visible=True,
 )
-errs = arbm.fit(np.reshape(x_train[:DSIZE], [-1, 784]), np.zeros([DSIZE], dtype=np.int32), n_epochs=EPOCHS, batch_size=BATCH_S)
+errs = arbm.fit(np.reshape(x_train[:DSIZE], [-1, 784]),
+                np.zeros([DSIZE], dtype=np.int32), n_epochs=EPOCHS, batch_size=BATCH_S)
 plt.plot(errs)
 plt.show()
 

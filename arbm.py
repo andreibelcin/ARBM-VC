@@ -22,8 +22,8 @@ class ARBM:
         Args:
             n_visible: The number of visible units.
             n_hidden: The number of hidden units.
-            sample_visible: True is the reconstructed visible units should be sampled during each Gibbs step.
-                False otherwise. Defaults to False.
+            sample_visible: True is the reconstructed visible units should be sampled during each
+                Gibbs step. False otherwise. Defaults to False.
             sigma: The standard deviation the gaussian visible units have. Defaults to 1.
             learning_rate: The learning rate applied on the gradient of the weights and biases.
             momentum: The momentum applied on the gradient of the weights and biases.
@@ -49,14 +49,14 @@ class ARBM:
         self.a_layer = tf.placeholder(tf.float32, [None, self.n_adaptive])
 
         # independent weights and biases
-        self.w_bar = tf.Variable(tf.truncated_normal([n_visible, n_hidden], stddev=0.1), dtype=tf.float32)
+        self.w_bar = tf.Variable(tf.truncated_normal([n_visible, n_hidden],
+                                 stddev=0.1), dtype=tf.float32)
         self.vb_bar = tf.Variable(tf.zeros([n_visible]), dtype=tf.float32)
         self.hb_bar = tf.Variable(tf.zeros([n_hidden]), dtype=tf.float32)
 
         # adaptive weights and biases
-        self.aw = tf.Variable(tf.truncated_normal(
-            [n_adaptive, n_visible, n_visible],
-            stddev=0.1), dtype=tf.float32)
+        self.aw = tf.Variable(tf.truncated_normal([n_adaptive, n_visible, n_visible],
+                              stddev=0.1), dtype=tf.float32)
         self.avb = tf.Variable(tf.zeros([n_adaptive, n_visible]), dtype=tf.float32)
         self.ahb = tf.Variable(tf.zeros([n_adaptive, n_hidden]), dtype=tf.float32)
 
@@ -92,10 +92,16 @@ class ARBM:
         self.sess.run(init)
 
     def _h_prob(self, v_sample, hb, w):
-        return tf.nn.softmax(tf.squeeze(tf.reshape(v_sample, shape=[-1, 1, self.n_visible]) @ w) + hb)
+        return tf.nn.softmax(
+            tf.squeeze(
+                tf.reshape(v_sample, shape=[-1, 1, self.n_visible]) @ w
+            ) + hb
+        )
 
     def _v_prob(self, h_sample, vb, w):
-        return tf.squeeze(tf.reshape(h_sample, shape=[-1, 1, self.n_hidden]) @ trans(w, perm=[0, 2, 1])) + vb
+        return tf.squeeze(
+            tf.reshape(h_sample, shape=[-1, 1, self.n_hidden]) @ trans(w, perm=[0, 2, 1])
+        ) + vb
 
     def _compute_hidden(self, v, hb, w):
         return sample_softmax(self._h_prob(v, hb, w))
@@ -107,15 +113,9 @@ class ARBM:
         return v
 
     def _compute_weights(self):
-        w = tf.reshape(
-            tf.reshape(
-                tf.tensordot(
-                    self.a_layer, self.aw,
-                    axes=[[1], [0]],
-                ),
-                shape=[-1, self.n_visible],
-            ) @ self.w_bar,
-            shape=[-1, self.n_visible, self.n_hidden],
+        w = tf.reshape(tf.reshape(tf.tensordot(
+                self.a_layer, self.aw, axes=[[1], [0]]), shape=[-1, self.n_visible],
+            ) @ self.w_bar, shape=[-1, self.n_visible, self.n_hidden],
         )
         vb = self.a_layer @ self.avb + self.vb_bar
         hb = self.a_layer @ self.ahb + self.hb_bar
@@ -198,12 +198,14 @@ class ARBM:
         )
 
     def _initialize_vars(self):
-        w_bar_grad, aw_grad, vb_bar_grad, avb_grad, hb_bar_grad, ahb_grad = self._compute_gradients()
+        w_bar_grad, aw_grad, vb_bar_grad,\
+            avb_grad, hb_bar_grad, ahb_grad = self._compute_gradients()
 
         # the momentum method for updating parameters
         def f(x_old, x_new):
             # I still don't understand why do I have to do that division at the end...
-            return self.momentum * x_old + self.epsilon * x_new * (1 - self.momentum) / tf.to_float(tf.shape(x_new)[0])
+            return self.momentum * x_old + \
+                   self.epsilon * x_new * (1 - self.momentum) / tf.to_float(tf.shape(x_new)[0])
 
         delta_w_bar_new = f(self.delta_w_bar, w_bar_grad)
         delta_aw_new = f(self.delta_aw, aw_grad)
@@ -281,12 +283,14 @@ class ARBM:
 
         Args:
             data: The training data to be used for learning
-            adaptation_labels: The labels of the speakers from which each data point came from. Must be a vector with
-                the same size as the number of training examples.
+            adaptation_labels: The labels of the speakers from which each data point came from.
+                Must be a vector with the same size as the number of training examples.
             n_epochs: The number of epochs. Defaults to 10.
             batch_size: The size of the data batch per epoch. Defaults to 10.
-            shuffle: True if the data should be shuffled before learning. False otherwise. Defaults to True.
-            verbose: True if the progress should be displayed on the standard output during training.
+            shuffle: True if the data should be shuffled before learning.
+                False otherwise. Defaults to True.
+            verbose: True if the progress should be displayed on
+                the standard output during training.
 
         Returns: An array of the mean square errors of each batch.
 
@@ -339,95 +343,10 @@ class ARBM:
     def reconstruct(self, v, a):
         onehots = np.zeros([1, self.n_adaptive])
         onehots[0][a] = 1
-        return self.sess.run(self.reconstruct_visible, feed_dict={self.v_layer: v, self.a_layer: onehots})
-
-
-'''
-    def transform(self, batch):
-        """
-        Computes the values of the hidden units given the visible units.
-
-        Args:
-            batch: The values of the visible units. Multiple input vectors can be given at once.
-
-        Returns: The values of the hidden units. Returns one output vector for each input vector in the batch.
-
-        """
-        return self.sess.run(self.compute_hidden, feed_dict={self.v_layer: batch})
-
-    def transform_inv(self, batch):
-        """
-        Computes the values of the visible units given the hidden units.
-
-        Args:
-            batch: The values of the hidden units. Multiple input vectors can be given at once.
-
-        Returns: The values of the visible units. Returns one output vector for each input vector in the batch.
-
-        """
-        return self.sess.run(self.compute_visible, feed_dict={self.h_layer: batch})
-'''
-'''
-    def get_independent_weights(self):
-        """
-        Gets the weights matrix and bias vectors currently in the model.
-
-        Returns: A tuple (weights matrix, visible units biases, hidden units biases).
-
-        """
-        return self.sess.run(self.w_bar), self.sess.run(self.vb_bar), self.sess.run(self.hb_bar)
-
-    def get_adaptive_weights(self):
-        """
-
-        Returns:
-
-        """
-        return self.sess.run(self.aw), self.sess.run(self.avb), self.sess.run(self.ahb)
-
-    def save_independent_weights(self, filename, name):
-        """
-        Saves the current weights and biases in the specified file.
-
-        Args:
-            filename: The file in which to save the model.
-            name: The name of the model.
-
-        Returns: The output of tf.train.Saver.save()
-
-        """
-        saver = tf.train.Saver({
-            name + '_w_bar': self.w_bar,
-            name + '_vb_bar': self.vb_bar,
-            name + '_hb_bar': self.hb_bar,
-        })
-        return saver.save(self.sess, filename)
-
-    def set_weights(self, w, visible_bias, hidden_bias):
-        """
-        Sets the weights matrix and bias vectors to the given values.
-        Args:
-            w: The matrix to which the weights to be set.
-            visible_bias: The vector to which the biases of the visible units to be set.
-            hidden_bias: The vector to which the biases of the hidden units to be set.
-
-        """
-        self.sess.run(self.w_bar.assign(w))
-        self.sess.run(self.vb_bar.assign(visible_bias))
-        self.sess.run(self.hb_bar.assign(hidden_bias))
-
-    def load_weights(self, filename, name):
-        """
-        Assigns to the weights matrix and bias vectors the values found in the specified file under the specified name.
-        Args:
-            filename: The file where the model is stored.
-            name: The name of the model.
-
-        """
-        saver = tf.train.Saver({
-            name + '_w': self.w,
-            name + '_v': self.vb,
-            name + '_h': self.hb,
-        })
-        saver.restore(self.sess, filename)
-'''
+        return self.sess.run(
+            self.reconstruct_visible,
+            feed_dict={
+                self.v_layer: v,
+                self.a_layer: onehots,
+            },
+        )
