@@ -16,7 +16,8 @@ def sample_bernoulli(probs):
 
 def sample_gaussian(x, sigma):
     """
-    Samples a real valued tensor based on gaussian distributions with the give element-wise means and global sigma.
+    Samples a real valued tensor based on gaussian distributions with
+        the give element-wise means and global sigma.
     Args:
         x: A tensor representing the means of the gaussian distributions of each element.
         sigma: The standard deviation of all the gaussian distributions.
