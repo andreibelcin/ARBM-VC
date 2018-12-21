@@ -296,6 +296,7 @@ class ARBM:
 
         """
         assert n_epochs > 0
+        data = np.array(data)
 
         n_data = np.shape(data)[0]
 
