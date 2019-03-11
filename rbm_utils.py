@@ -3,7 +3,7 @@ import tensorflow as tf
 
 def sample_bernoulli(probs):
     """
-    Samples a binary tensor based no the given element-wise probabilities.
+    Samples a binary tensor based on the given element-wise probabilities.
 
     Args:
         probs: A tensor representing the probabilities of each element to be equal to 1.
