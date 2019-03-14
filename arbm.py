@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import sys
-from rbm_utils import sample_softmax, sample_gaussian, trans
+from rbm_utils import sample_bernoulli, sample_gaussian, trans
 
 
 class ARBM:
@@ -186,7 +186,7 @@ class ARBM:
         def f(x_old, x_new):
             # I still don't understand why do I have to do that division at the end...
             return self.momentum * x_old + \
-                   self.epsilon * x_new * (1 - self.momentum) / tf.to_float(tf.shape(x_new)[0])
+                   self.epsilon * x_new * (1 - self.momentum)  / (tf.to_float(tf.shape(x_new)[0])*100000)
 
         delta_bar_weights_new = f(self.delta_bar_weights, bar_weights_gradient)
         delta_bar_v_bias_new = f(self.delta_bar_v_bias, bar_v_bias_gradient)
@@ -239,10 +239,10 @@ class ARBM:
         return weights, v_bias, h_bias
 
     def _compute_hidden(self, v_layer, h_bias, weights):
-        return sample_softmax(tf.nn.softmax(v_layer @ weights + h_bias))
+        return (tf.nn.sigmoid((v_layer // self.sigma**2) @ weights + h_bias)) * 3.0
 
     def _compute_visible(self, h_layer, v_bias, weights):
-        v = h_layer @ trans(weights) + v_bias
+        v = (sample_bernoulli(h_layer) @ trans(weights) + v_bias) / 3.0
         if self.sample_visible:
             v = sample_gaussian(v, self.sigma)
         return v
@@ -361,8 +361,7 @@ class ARBM:
                     batch = features[batch_nr - batch_size:batch_nr]
                     self._partial_fit(batch, label)
                     batch_err = self._get_error(batch, label)
-                    print(batch_err)
-                    assert np.isnan(batch_err) is False
+                    assert np.isnan(batch_err).any() == False
                     epoch_errs = np.append(epoch_errs, batch_err)
 
                 if verbose:

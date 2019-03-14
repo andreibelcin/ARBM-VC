@@ -82,7 +82,6 @@ class ARBM_RBM:
         self.rbm = RBM(
             n_visible=n_visible,
             n_hidden=n_hidden,
-            sample_visible=sample_visible,
             learning_rate=learning_rate,
             momentum=momentum,
             cdk_level=cdk_level,

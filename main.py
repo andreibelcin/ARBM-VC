@@ -28,8 +28,8 @@ class Dirs:
     TM2 = "data/vcc2016_training/TM2"
     TM3 = "data/vcc2016_training/TM3"
     TRAIN = [SF1, SF2, SM1, SM2, TF1, TM1]
-    TEST = [SF1, SM1]
-    TEST_LABELS = [0, 2]
+    TEST = [SF1, TF1, TF2]
+    TEST_LABELS = [0, 4, 3]
 
 
 def load_model(
@@ -63,7 +63,7 @@ def extract_features(
         wav_file: np.ndarray,
 ) -> np.ndarray:
     def mfcc_features():
-        return mfcc(wav_file, sr=sample_rate, n_mfcc=FEATURE_VECTOR_LENGTH+1)[1:]
+        return mfcc(wav_file, sr=sample_rate, n_mfcc=FEATURE_VECTOR_LENGTH+2)[2:]
 
     def psc_features():
         pass
@@ -211,29 +211,23 @@ def main():
     train_data = get_train_data()
     arbm, errors = make_model(
         n_visible=FEATURE_VECTOR_LENGTH,
-        n_hidden=16,
+        n_hidden=FEATURE_VECTOR_LENGTH*8,
         n_adaptive=len(train_data),
         data_dict=train_data,
+        sample_visible=False,
     )
     p.plot_line(errors, axes_title="Error rate")
     test_data = get_test_data()
-    target_test_data = arbm.convert(0, test_data[0], 2)
-    p.plot_heatmap_comp(target_test_data, test_data[2], "Conversion", "Original", "Conversion Comparison")
-    reconstruction = arbm.reconstruct(0, test_data[0])
-    p.plot_heatmap_comp(reconstruction, test_data[0], "Reconstruction", "Original", "Reconstruction Comparison")
+    target_test_data_1 = arbm.convert(4, test_data[4], 3)
+    p.plot_heatmap_comp(test_data[3], target_test_data_1, "Target", "Conversion", "Conversion Comparison T")
+    p.plot_heatmap_comp(test_data[4], target_test_data_1, "Source", "Conversion", "Conversion Comparison S")
+    target_test_data_2 = arbm.reconstruct(4, test_data[3])
+    p.plot_heatmap_comp(test_data[3], target_test_data_2, "Original", "Reconstruction", "Reconstruction Comparison")
     p.show()
 
 
 def playground():
-    import tensorflow as tf
-    A = tf.Variable(tf.zeros([7, 3, 2], dtype=tf.int32))
-    K = tf.Variable([[1, 2],
-                     [2, 3],
-                     [4, 3]])
-    R = tf.scatter_add(A, 3, K)
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-    print(sess.run(R))
+    pass
 
 
 if __name__ == "__main__":

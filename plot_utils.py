@@ -30,8 +30,10 @@ class Plotter:
     ) -> plt.Figure:
         if title is not None:
             fig = plt.figure(title)
-        else:
+        elif tracking:
             fig = plt.figure("Figure {}".format(len(self._figures)))
+        else:
+            fig = plt.figure("Figure")
         gs = fig.add_gridspec(gridspec[0], gridspec[1])
         for row in range(gridspec[0]):
             for col in range(gridspec[1]):
