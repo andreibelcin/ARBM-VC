@@ -28,8 +28,8 @@ class Dirs:
     TM2 = "data/vcc2016_training/TM2"
     TM3 = "data/vcc2016_training/TM3"
     TRAIN = [SF1, SF2, SM1, SM2, TF1, TM1]
-    TEST = [SF1, TF1, TF2]
-    TEST_LABELS = [0, 4, 3]
+    TEST = [SF1, SF2, SM2]
+    TEST_LABELS = [0, 1, 3]
 
 
 def load_model(
@@ -215,14 +215,16 @@ def main():
         n_adaptive=len(train_data),
         data_dict=train_data,
         sample_visible=False,
+        n_epochs=60,
+        batch_size=150,
     )
     p.plot_line(errors, axes_title="Error rate")
     test_data = get_test_data()
-    target_test_data_1 = arbm.convert(4, test_data[4], 3)
-    p.plot_heatmap_comp(test_data[3], target_test_data_1, "Target", "Conversion", "Conversion Comparison T")
-    p.plot_heatmap_comp(test_data[4], target_test_data_1, "Source", "Conversion", "Conversion Comparison S")
-    target_test_data_2 = arbm.reconstruct(4, test_data[3])
-    p.plot_heatmap_comp(test_data[3], target_test_data_2, "Original", "Reconstruction", "Reconstruction Comparison")
+    target_test_data_1 = arbm.convert(0, test_data[0], 0)
+    p.plot_heatmap_comp(test_data[0], target_test_data_1, "Target", "Conversion", "Conversion Comparison T")
+    p.plot_heatmap_comp(test_data[1], target_test_data_1, "Source", "Conversion", "Conversion Comparison S")
+    target_test_data_2 = arbm.reconstruct(1, test_data[1])
+    p.plot_heatmap_comp(test_data[1], target_test_data_2, "Original", "Reconstruction", "Reconstruction Comparison")
     p.show()
 
 

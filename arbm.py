@@ -12,8 +12,8 @@ class ARBM:
         n_adaptive,
         sample_visible=False,
         sigma=1,
-        learning_rate=0.001,
-        momentum=0,
+        learning_rate=0.01,
+        momentum=0.95,
         cdk_level=1,
     ):
         """
@@ -43,12 +43,10 @@ class ARBM:
         self.momentum = momentum
         self.cdk_level = cdk_level
 
-        self._index = 0
-        self._source = 0
-        self._target = 0
-
         # initialise tensorflow variables
         self.input = None
+        self.label = None
+        self.hidden = None
 
         self.bar_weights = None
         self.bar_v_bias = None
@@ -69,6 +67,8 @@ class ARBM:
         self._initialise_variables()
 
         assert self.input is not None
+        assert self.label is not None
+        assert self.hidden is not None
 
         assert self.bar_weights is not None
         assert self.bar_v_bias is not None
@@ -90,8 +90,8 @@ class ARBM:
         self.update_weights = None
         self.update_deltas = None
         self.compute_hidden = None
+        self.compute_visible = None
         self.reconstruct_visible = None
-        self.compute_conversion = None
         self.compute_error = None
 
         self._initialise_calculations()
@@ -99,8 +99,8 @@ class ARBM:
         assert self.update_weights is not None
         assert self.update_deltas is not None
         assert self.compute_hidden is not None
+        assert self.compute_visible is not None
         assert self.reconstruct_visible is not None
-        assert self.compute_conversion is not None
         assert self.compute_error is not None
 
         init = tf.global_variables_initializer()
@@ -110,6 +110,8 @@ class ARBM:
     def _initialise_variables(self):
         # unit layers of the machine
         self.input = tf.placeholder(tf.float32, [None, self.n_visible])
+        self.label = tf.placeholder(tf.float32, [self.n_adaptive])
+        self.hidden = tf.placeholder(tf.float32, [None, self.n_hidden])
 
         # independent weights and biases
         self.bar_weights = tf.Variable(
@@ -172,7 +174,7 @@ class ARBM:
         )
 
     def _initialise_calculations(self):
-        weights, v_bias, h_bias = self._compute_weights(self._index)
+        weights, v_bias, h_bias = self._compute_weights()
         (
             bar_weights_gradient,
             bar_v_bias_gradient,
@@ -184,9 +186,8 @@ class ARBM:
 
         # the momentum method for updating parameters
         def f(x_old, x_new):
-            # I still don't understand why do I have to do that division at the end...
             return self.momentum * x_old + \
-                   self.epsilon * x_new * (1 - self.momentum)  / (tf.to_float(tf.shape(x_new)[0])*100000)
+                   self.epsilon * x_new * (1 - self.momentum) / (tf.to_float(tf.shape(x_new)[0])*100000)
 
         delta_bar_weights_new = f(self.delta_bar_weights, bar_weights_gradient)
         delta_bar_v_bias_new = f(self.delta_bar_v_bias, bar_v_bias_gradient)
@@ -228,14 +229,29 @@ class ARBM:
         ]
 
         self.compute_hidden = self._compute_hidden(self.input, h_bias, weights)
+        self.compute_visible = self._compute_visible(self.hidden, v_bias, weights)
         self.reconstruct_visible = self._compute_visible(self.compute_hidden, v_bias, weights)
-        self.compute_conversion = self._compute_conversion()
         self.compute_error = tf.reduce_mean(tf.square(self.input - self.reconstruct_visible))
 
-    def _compute_weights(self, index):
-        weights = self.adaptive_weights[index] @ self.bar_weights
-        v_bias = self.adaptive_v_bias[index] + self.bar_v_bias
-        h_bias = self.adaptive_h_bias[index] + self.bar_h_bias
+    def _compute_weights(self):
+        weights = tf.tensordot(
+            self.adaptive_weights,
+            self.label,
+            axes=[[0], [0]],
+        ) @ self.bar_weights
+
+        v_bias = tf.tensordot(
+            self.adaptive_v_bias,
+            self.label,
+            axes=[[0], [0]],
+        ) + self.bar_v_bias
+
+        h_bias = tf.tensordot(
+            self.adaptive_h_bias,
+            self.label,
+            axes=[[0], [0]],
+        ) + self.bar_h_bias
+
         return weights, v_bias, h_bias
 
     def _compute_hidden(self, v_layer, h_bias, weights):
@@ -254,23 +270,34 @@ class ARBM:
         v_sample = v_sample / self.sigma**2
         v0_sample = v0_sample / self.sigma**2
 
-        bar_weights_gradient = trans(v0_sample @ self.adaptive_weights[self._index]) @ h0_sample -\
-                               trans(v_sample @ self.adaptive_weights[self._index]) @ h_sample
+        bar_weights_gradient = trans(v0_sample @ tf.tensordot(
+            self.adaptive_weights,
+            self.label,
+            axes=[[0], [0]],
+        )) @ h0_sample - trans(v_sample @ tf.tensordot(
+            self.adaptive_weights,
+            self.label,
+            axes=[[0], [0]],
+        )) @ h_sample
+
         bar_v_bias_gradient = tf.reduce_sum(v0_sample - v_sample, 0)
         bar_h_bias_gradient = tf.reduce_sum(h0_sample - h_sample, 0)
+
+        index = tf.squeeze(tf.where(tf.not_equal(self.label, tf.constant(0, dtype=tf.float32))))
+
         adaptive_weights_gradient = tf.scatter_add(
             tf.Variable(tf.zeros([self.n_adaptive, self.n_visible, self.n_visible], dtype=tf.float32)),
-            self._index,
+            index,
             trans(self.bar_weights @ (trans(h0_sample) @ v0_sample - trans(h_sample) @ v_sample)),
         )
         adaptive_v_bias_gradient = tf.scatter_add(
             tf.Variable(tf.zeros([self.n_adaptive, self.n_visible], dtype=tf.float32)),
-            self._index,
+            index,
             tf.reduce_sum(v0_sample - v_sample, 0),
         )
         adaptive_h_bias_gradient = tf.scatter_add(
             tf.Variable(tf.zeros([self.n_adaptive, self.n_hidden], dtype=tf.float32)),
-            self._index,
+            index,
             tf.reduce_sum(h0_sample - h_sample, 0),
         )
 
@@ -282,13 +309,6 @@ class ARBM:
             adaptive_v_bias_gradient,
             adaptive_h_bias_gradient,
         )
-
-    def _compute_conversion(self):
-        forward_weights, _, forward_h_bias = self._compute_weights(self._source)
-        backward_weights, backward_v_bias, _ = self._compute_weights(self._target)
-        h_sample = self._compute_hidden(self.input, forward_h_bias, forward_weights)
-        v_sample = self._compute_visible(h_sample, backward_v_bias, backward_weights)
-        return v_sample
 
     def _gibbs_iter(self, weights, v_bias, h_bias):
         v_sample = self.input
@@ -306,16 +326,20 @@ class ARBM:
             batch,
             batch_label,
     ):
-        self._index = batch_label
-        return self.sess.run(self.compute_error, feed_dict={self.input: batch})
+        return self.sess.run(
+            self.compute_error,
+            feed_dict={self.input: batch, self.label: batch_label},
+        )
 
     def _partial_fit(
             self,
             batch,
             batch_label,
     ):
-        self._index = batch_label
-        self.sess.run(self.update_weights + self.update_deltas, feed_dict={self.input: batch})
+        self.sess.run(
+            self.update_weights + self.update_deltas,
+            feed_dict={self.input: batch, self.label: batch_label},
+        )
 
     def fit(
         self,
@@ -357,10 +381,13 @@ class ARBM:
                 if shuffle:
                     np.random.shuffle(features)
 
+                onehot = np.zeros([self.n_adaptive], dtype=float)
+                onehot[label] = 1
+
                 for batch_nr in range(batch_size, features.shape[0], batch_size):
                     batch = features[batch_nr - batch_size:batch_nr]
-                    self._partial_fit(batch, label)
-                    batch_err = self._get_error(batch, label)
+                    self._partial_fit(batch, onehot)
+                    batch_err = self._get_error(batch, onehot)
                     assert np.isnan(batch_err).any() == False
                     epoch_errs = np.append(epoch_errs, batch_err)
 
@@ -379,10 +406,11 @@ class ARBM:
             speaker_label,
             speaker_data,
     ):
-        self._index = speaker_label
+        onehot = np.zeros([self.n_adaptive], dtype=float)
+        onehot[speaker_label] = 1
         return np.transpose(self.sess.run(
             self.reconstruct_visible,
-            feed_dict={self.input: np.transpose(speaker_data)},
+            feed_dict={self.input: np.transpose(speaker_data), self.label: onehot},
         ))
 
     def convert(
@@ -391,12 +419,20 @@ class ARBM:
             source_data,
             target_label,
     ):
-        self._source = source_label
-        self._target = target_label
-        return np.transpose(self.sess.run(
-            self.compute_conversion,
-            feed_dict={self.input: np.transpose(source_data)},
-        ))
+
+        onehot = np.zeros([self.n_adaptive], dtype=float)
+        onehot[source_label] = 1
+        hidden = self.sess.run(
+            self.compute_hidden,
+            feed_dict={self.input: np.transpose(source_data), self.label: onehot},
+        )
+        onehot[source_label] = 0
+        onehot[target_label] = 1
+        conversion = self.sess.run(
+            self.compute_visible,
+            feed_dict={self.hidden: hidden, self.label: onehot},
+        )
+        return np.transpose(conversion)
 
     def add_speaker(
             self,
